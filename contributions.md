@@ -4,16 +4,8 @@
 
 | Name | ID | Contribution |
 |---|---|---|
-| Member 1 | XXXXXXX | QLoRA fine-tuning pipeline, model selection |
-| Member 2 | XXXXXXX | Data preprocessing, evidence extraction |
-| Member 3 | XXXXXXX | Playbook design and implementation |
-| Member 4 | XXXXXXX | RunTrace schema, evaluation metrics |
-| Member 5 | XXXXXXX | Integration testing, documentation |
-
-## Task Breakdown
-
-- **Data Pipeline**: [member(s)] — downloaded ContractNLI, parsed JSON, built training examples
-- **Model Training**: [member(s)] — configured QLoRA, ran fine-tuning, tuned hyperparameters
-- **Inference & Evidence**: [member(s)] — built inference loop, evidence span extraction
-- **Playbook & Traces**: [member(s)] — designed playbook.yaml, implemented RunTrace generation
-- **Evaluation & Deliverables**: [member(s)] — metric computation, CSV generation, testing
+| Seif Diaa | 55-8584 | QLoRA fine-tuning pipeline, model selection |
+| Ziad Abdelrahman | 55-1371 | Used Unsloth to significantly shorten training time, as well as parallelize on 2 GPUs |
+| Mahmoud Dahroug | 55-1311 | QLoRA fine-tuning pipeline and Output Validation  |
+| Yousef Elbrolosy | 55-2615 | Output Validation, Initial Planning and Testing |
+| Youssef Adel | 55-2491 | QLoRA fine-tuning pipeline and Initial Planning |
