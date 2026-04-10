@@ -1,4 +1,4 @@
-# legal-document-analysis-using-genAI
+# Legal Document Analysis using GenAI
 In this project, we build an NDA document classification and review system that analyzes contracts using the ContractNLI dataset, a benchmark designed for reasoning over legal agreements.
 
 
