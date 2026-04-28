@@ -1,0 +1,41 @@
+name: Multi-Agent Legal Document Analysis
+version: '2.0'
+architecture:
+  - type: LLM
+    name: Qwen2.5-3B-Instruct
+    provider: HuggingFace
+    quantization: 4-bit (BitsAndBytes)
+    role: Core Reasoning Engine & Conversational Agent
+
+  - type: Vector Database
+    name: ChromaDB
+    indexer: sentence-transformers/all-MiniLM-L6-v2 (CPU execution)
+    role: Semantic Search for Historical Precedent
+    components:
+      - Clause and Hypothesis Embedded Chunks
+      - Scaled Batching Mechanism (N < 5000)
+
+  - type: Graph Database
+    name: NetworkX
+    storage: Pickled Graph
+    role: Explicit Relational Traversal
+    components:
+      - Clause Nodes
+      - Hypothesis Nodes
+      - Relation Edges
+
+  - type: State Manager
+    name: Conversational Agent History
+    role: Contextual Memory & Prompt Grounding
+    memory_structure:
+      - history: list[dict]
+      - system_prompt: "You are an expert legal aide reviewing NDAs..."
+      - grounding_constraint: "Use the provided External Context ONLY to understand how similar clauses were interpreted... Always ground your final decision strictly on the provided Target Contract Text."
+
+  - type: Orchestrator
+    name: run_main (Python)
+    role: Retrieval Strategy Selection & Prompt Hydration
+    features:
+      - mode_: [vector, graph]
+      - test_contract_loader: test.json
+      - runtrace_logger: runtrace_output.json
