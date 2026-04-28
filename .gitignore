@@ -1,0 +1,6 @@
+assets/assets
+
+src/__pycache__/
+
+*.pdf
+
