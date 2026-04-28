@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/schemas/contractnli-ms2-runtrace.schema.json",
+  "title": "ContractNLI MS2 RunTrace (Multi-Agent & RAG)",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run",
+    "retrieval_strategy",
+    "conversation_history",
+    "contract",
+    "playbook",
+    "hypothesis_traces",
+    "metrics",
+    "run_validations"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["2.0-ms2"]
+    },
+    "run": {
+      "type": "object",
+      "required": ["run_id", "started_at", "framework"],
+      "properties": {
+        "run_id": { "type": "string" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "framework": { "type": "string", "enum": ["multi_agent_system"] }
+      }
+    },
+    "retrieval_strategy": {
+      "type": "object",
+      "required": ["mode", "knowledge_base_source"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["vector", "graph", "hybrid"] },
+        "knowledge_base_source": { "type": "string" }
+      }
+    },
+    "conversation_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["turn_id", "role", "content"],
+        "properties": {
+          "turn_id": { "type": "integer" },
+          "role": { "type": "string", "enum": ["user", "assistant", "system"] },
+          "content": { "type": "string" },
+          "retrieved_context": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "required": ["contract_id", "text", "hash_sha256"],
+      "properties": {
+        "contract_id": { "type": "string" },
+        "text": { "type": "string" },
+        "hash_sha256": { "type": "string" }
+      }
+    },
+    "playbook": {
+      "type": "object"
+    },
+    "hypothesis_traces": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "run_validations": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  }
+}
