@@ -1,5 +1,5 @@
 import json
-from src.retrieval import VectorRetriever, GraphRetriever
+from ms2.src.retrieval import VectorRetriever, GraphRetriever
 
 class ConversationalAgent:
     """ Stateful Conversation Layer for Qwen2.5-3B-Instruct. """

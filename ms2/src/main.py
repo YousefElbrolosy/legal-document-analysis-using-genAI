@@ -1,7 +1,7 @@
 import argparse
 import json
-from src.retrieval import VectorRetriever, GraphRetriever
-from src.agent import ConversationalAgent
+from ms2.src.retrieval import VectorRetriever, GraphRetriever
+from ms2.src.agent import ConversationalAgent
 
 def run_main(contract_path: str, retriever_mode: str, initial_prompt: str):
     """
