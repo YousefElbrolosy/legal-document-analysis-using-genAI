@@ -1,8 +1,10 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://example.org/schemas/contractnli-ms2-runtrace.schema.json",
-  "title": "ContractNLI MS2 RunTrace (Multi-Agent & RAG)",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guc-csen1144.example/schemas/runtrace_ms2.schema.json",
+  "title": "Milestone 2 Runtrace Schema",
+  "description": "Schema for one Milestone 2 run through exactly one retrieval branch and the stateful conversation layer, with space for the planned 17 hypothesis-level outputs.",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "schema_version",
     "run",
@@ -16,64 +18,316 @@
   ],
   "properties": {
     "schema_version": {
-      "type": "string",
-      "enum": ["2.0-ms2"]
+      "const": "2.0-ms2"
     },
     "run": {
       "type": "object",
-      "required": ["run_id", "started_at", "framework"],
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "started_at",
+        "framework"
+      ],
       "properties": {
-        "run_id": { "type": "string" },
-        "started_at": { "type": "string", "format": "date-time" },
-        "framework": { "type": "string", "enum": ["multi_agent_system"] }
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "framework": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "success",
+            "partial",
+            "failed"
+          ]
+        }
       }
     },
     "retrieval_strategy": {
       "type": "object",
-      "required": ["mode", "knowledge_base_source"],
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "knowledge_base_source"
+      ],
       "properties": {
-        "mode": { "type": "string", "enum": ["vector", "graph", "hybrid"] },
-        "knowledge_base_source": { "type": "string" }
+        "mode": {
+          "enum": [
+            "vector",
+            "graph"
+          ]
+        },
+        "knowledge_base_source": {
+          "const": "ContractNLI-train"
+        },
+        "selector": {
+          "type": "string"
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "conversation_history": {
       "type": "array",
       "items": {
-        "type": "object",
-        "required": ["turn_id", "role", "content"],
-        "properties": {
-          "turn_id": { "type": "integer" },
-          "role": { "type": "string", "enum": ["user", "assistant", "system"] },
-          "content": { "type": "string" },
-          "retrieved_context": {
-            "type": "array",
-            "items": { "type": "string" }
-          }
-        }
+        "$ref": "#/$defs/conversation_turn"
       }
     },
     "contract": {
       "type": "object",
-      "required": ["contract_id", "text", "hash_sha256"],
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "hash_sha256"
+      ],
       "properties": {
-        "contract_id": { "type": "string" },
-        "text": { "type": "string" },
-        "hash_sha256": { "type": "string" }
+        "contract_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "description": "May contain full text or a documented preview, depending on storage policy."
+        },
+        "hash_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "split": {
+          "const": "ContractNLI evaluation split"
+        }
       }
     },
     "playbook": {
-      "type": "object"
+      "type": "object",
+      "description": "Playbook metadata or embedded playbook excerpt for this run.",
+      "additionalProperties": true,
+      "properties": {
+        "schema_version": {
+          "const": "2.0-ms2"
+        },
+        "schema_file": {
+          "const": "assets/playbook_ms2.schema.json"
+        }
+      }
     },
     "hypothesis_traces": {
-      "type": "array",
-      "items": { "type": "object" }
+      "description": "Milestone 2 may leave this empty when 17-way hypothesis review is architectural only; a full architecture trace should contain exactly 17 items.",
+      "oneOf": [
+        {
+          "type": "array",
+          "maxItems": 0
+        },
+        {
+          "type": "array",
+          "minItems": 17,
+          "maxItems": 17,
+          "items": {
+            "$ref": "#/$defs/hypothesis_trace"
+          }
+        }
+      ]
     },
     "metrics": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "f1": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "strict_accuracy": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
     },
     "run_validations": {
       "type": "array",
-      "items": { "type": "object" }
+      "items": {
+        "$ref": "#/$defs/run_validation"
+      }
+    }
+  },
+  "$defs": {
+    "conversation_turn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turn_id",
+        "role",
+        "content"
+      ],
+      "properties": {
+        "turn_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "role": {
+          "enum": [
+            "system",
+            "user",
+            "assistant"
+          ]
+        },
+        "content": {
+          "type": "string"
+        },
+        "retrieved_context": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "retrieval_results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/retrieval_result"
+          }
+        }
+      }
+    },
+    "retrieval_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "text"
+      ],
+      "properties": {
+        "source": {
+          "enum": [
+            "vector_db",
+            "graph_db"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "hypothesis_trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hypothesis_id",
+        "hypothesis_text",
+        "label",
+        "contract_evidence",
+        "external_context_used",
+        "status"
+      ],
+      "properties": {
+        "hypothesis_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hypothesis_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "enum": [
+            "Entailment",
+            "Contradiction",
+            "NotMentioned",
+            "NotEvaluated"
+          ]
+        },
+        "contract_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contract_evidence"
+          }
+        },
+        "external_context_used": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/retrieval_result"
+          }
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "implemented",
+            "architectural_placeholder",
+            "planned_ms3"
+          ]
+        }
+      }
+    },
+    "contract_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "span_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "span_end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": {
+          "const": "target_contract"
+        }
+      }
+    },
+    "run_validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "status"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "warning",
+            "not_run"
+          ]
+        },
+        "details": {
+          "type": "string"
+        }
+      }
     }
   }
 }
