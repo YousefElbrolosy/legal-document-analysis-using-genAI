@@ -4,3 +4,18 @@ src/__pycache__/
 
 Milestone 2 (Project).pdf
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets / env
+.env
+ms3/.env
+
+# MS3 runtime artifacts
+ms3/runs/
+ms3/DBs/
+ms3_runtraces.zip
+
