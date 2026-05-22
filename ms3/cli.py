@@ -85,11 +85,37 @@ def _cmd_chat(args: argparse.Namespace) -> int:
 
 
 def _cmd_eval(args: argparse.Namespace) -> int:
-    from ms3.eval.run_eval import run_eval
+    import json
+
+    from ms3.config import DEV_SPLIT_PATH, TEST_SPLIT_PATH
+    from ms3.eval.run_eval import parse_contract_ids, parse_indices, run_eval
+
+    indices = None
+    if args.indices and args.contract_ids:
+        print("[ms3] error: pass either --indices or --contract-ids, not both")
+        return 2
+    if args.indices or args.contract_ids:
+        split_path = TEST_SPLIT_PATH if args.split == "test" else DEV_SPLIT_PATH
+        with open(split_path, "r", encoding="utf-8") as f:
+            split_data = json.load(f)
+        all_ids = [str(doc["id"]) for doc in split_data["documents"]]
+        if args.contract_ids:
+            indices = parse_contract_ids(args.contract_ids, all_ids)
+            print(
+                f"[ms3] running contract IDs {args.contract_ids!r} -> "
+                f"{len(indices)} indices: {indices}"
+            )
+            print(f"[ms3] resolved contract IDs: {[all_ids[i] for i in indices]}")
+        else:
+            indices = parse_indices(args.indices, len(all_ids))
+            print(f"[ms3] running indices ({len(indices)}): {indices}")
 
     csv_path, zip_path = run_eval(
-        split=args.split, limit=args.limit, out_dir=Path(args.out_dir) if args.out_dir else RUNS_DIR,
+        split=args.split,
+        limit=args.limit,
+        out_dir=Path(args.out_dir) if args.out_dir else RUNS_DIR,
         retriever=args.retriever,
+        indices=indices,
     )
     print(f"[ms3] eval csv -> {csv_path}")
     print(f"[ms3] runtraces zip -> {zip_path}")
@@ -104,6 +130,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", help="Override runtrace output path (hypothesis mode)")
     p.add_argument("--split", choices=["test", "dev"], default="test")
     p.add_argument("--limit", type=int, default=None, help="eval: max #contracts")
+    p.add_argument(
+        "--indices",
+        default=None,
+        help='eval: comma-separated POSITIONAL indices/ranges, e.g. "22,25,36,46-" or "22,25,36,46-100"',
+    )
+    p.add_argument(
+        "--contract-ids",
+        default=None,
+        help='eval: comma-separated CONTRACT IDs/ranges (matches runtrace filename), e.g. "22,25,36,354,539-"',
+    )
     p.add_argument("--out-dir", help="eval: directory for per-contract runtraces")
     args = p.parse_args(argv)
 

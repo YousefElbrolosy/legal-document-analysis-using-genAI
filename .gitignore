@@ -17,5 +17,4 @@ ms3/.env
 # MS3 runtime artifacts
 ms3/runs/
 ms3/DBs/
-ms3_runtraces.zip
 
