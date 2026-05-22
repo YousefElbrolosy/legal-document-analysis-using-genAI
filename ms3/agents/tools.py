@@ -222,24 +222,6 @@ TOOL_SCHEMAS_ANALYZER = [
     {
         "type": "function",
         "function": {
-            "name": "playbook_lookup",
-            "description": "MUST be called after you decide a label. Returns the deterministic severity, recommended_action, and criticality from the MS1 playbook for (hypothesis_id, label).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "hypothesis_id": {"type": "string", "description": "H01..H17"},
-                    "label": {
-                        "type": "string",
-                        "enum": ["ENTAILED", "CONTRADICTED", "NOT_MENTIONED"],
-                    },
-                },
-                "required": ["hypothesis_id", "label"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "get_contract_chunk",
             "description": "Fetch the full text + char-span of a contract chunk by id.",
             "parameters": {

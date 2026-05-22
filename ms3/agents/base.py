@@ -1,10 +1,19 @@
-"""Shared tool-loop helper: drives an LLM round of tool-calling.
+"""Shared tool-loop helper for the Ollama-Cloud-backed agents.
 
-Both Analyzer and Conversation agents use the same loop:
+Ollama's response/message shape differs from OpenAI's:
+  - `response.message.tool_calls[i].function.arguments` is already a Python
+    dict (no JSON-decoding step needed),
+  - assistant messages with tool calls are echoed back as
+    `{"role": "assistant", "tool_calls": [{"function": {"name", "arguments"}}]}`
+    (no `id`/`type` fields),
+  - tool results are `{"role": "tool", "name": ..., "content": ...}` —
+    there is no `tool_call_id` field.
+
+The loop:
   1. Send messages + tools.
-  2. If the LLM returns tool_calls, dispatch them via TOOL_FUNCTIONS,
-     append the tool results to messages, and call the LLM again.
-  3. Stop when the LLM returns a plain assistant message (no tool_calls)
+  2. If the response message has `tool_calls`, dispatch each via
+     `TOOL_FUNCTIONS` and append the result as a tool message.
+  3. Stop when the model returns a plain assistant message (no tool_calls)
      or after `max_iters` rounds.
 """
 from __future__ import annotations
@@ -14,6 +23,23 @@ from typing import Any
 
 from ms3.agents.tools import TOOL_FUNCTIONS
 from ms3.models.llm import chat
+
+
+def _arguments_to_dict(arguments: Any) -> dict[str, Any]:
+    """Normalise `function.arguments` across SDK versions (dict | str | mapping)."""
+    if arguments is None:
+        return {}
+    if isinstance(arguments, dict):
+        return arguments
+    if isinstance(arguments, str):
+        try:
+            return json.loads(arguments) if arguments else {}
+        except json.JSONDecodeError:
+            return {}
+    try:
+        return dict(arguments)
+    except Exception:
+        return {}
 
 
 def run_tool_loop(
@@ -33,32 +59,29 @@ def run_tool_loop(
             max_tokens=max_tokens,
         )
         tool_calls = getattr(msg, "tool_calls", None) or []
+        content = getattr(msg, "content", "") or ""
         if not tool_calls:
-            messages.append({"role": "assistant", "content": msg.content or ""})
-            return msg.content or "", messages
+            messages.append({"role": "assistant", "content": content})
+            return content, messages
+
+        # Echo the assistant turn back in Ollama-native shape so the next
+        # call can interpret the tool exchange correctly.
+        echoed_calls: list[dict[str, Any]] = []
+        dispatch: list[tuple[str, dict[str, Any]]] = []
+        for tc in tool_calls:
+            name = tc.function.name
+            args = _arguments_to_dict(tc.function.arguments)
+            echoed_calls.append({"function": {"name": name, "arguments": args}})
+            dispatch.append((name, args))
         messages.append(
             {
                 "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        },
-                    }
-                    for tc in tool_calls
-                ],
+                "content": content,
+                "tool_calls": echoed_calls,
             }
         )
-        for tc in tool_calls:
-            name = tc.function.name
-            try:
-                args = json.loads(tc.function.arguments or "{}")
-            except json.JSONDecodeError:
-                args = {}
+
+        for name, args in dispatch:
             fn = TOOL_FUNCTIONS.get(name)
             if fn is None:
                 result: Any = {"error": f"unknown tool: {name}"}
@@ -70,11 +93,11 @@ def run_tool_loop(
             messages.append(
                 {
                     "role": "tool",
-                    "tool_call_id": tc.id,
                     "name": name,
                     "content": json.dumps(result, ensure_ascii=False, default=str)[:6000],
                 }
             )
+
     messages.append(
         {"role": "assistant", "content": "[max tool iterations reached]"}
     )

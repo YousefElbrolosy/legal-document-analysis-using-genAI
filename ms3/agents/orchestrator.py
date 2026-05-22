@@ -1,11 +1,13 @@
-"""Orchestrator agent: LangGraph state machine that routes work between
-the Analyzer, the Validator, and the Conversation agent and owns the
-Runtrace lifecycle.
+"""Orchestrator: LangGraph state machine that drives the Analyzer over the
+17 hypotheses and owns the Runtrace lifecycle.
 
-Hypothesis-analysis graph:
-    orchestrator -> analyzer -> validator -> orchestrator (next hyp or end)
-                       ▲          │
-                       └──retry───┘   (capped at VALIDATOR_MAX_RETRIES)
+Hypothesis-analysis graph (simplified — no validator retry loop):
+
+    orchestrator -> analyzer -> commit -> orchestrator -> ... -> END
+
+`validate_draft()` is still called (pure code, zero LLM tokens) inside
+`commit` so the runtrace carries quote_integrity_pass and validations[],
+but its verdict no longer triggers a re-analyze.
 """
 from __future__ import annotations
 
@@ -16,26 +18,17 @@ from langgraph.graph import END, StateGraph
 from ms3.agents.analyzer import analyze_hypothesis
 from ms3.agents.tools import register_contract, set_agent, set_runtrace
 from ms3.agents.validator import validate_draft
-from ms3.config import VALIDATOR_MAX_RETRIES
-from ms3.playbook.loader import (
-    DATASET_CHOICE_TO_LABEL,
-    HID_TO_NDA,
-    NDA_TO_HID,
-    criticality,
-    hypothesis_text,
-)
+from ms3.playbook.loader import HID_TO_NDA, criticality, hypothesis_text
 from ms3.runtrace.builder import Runtrace, now
 
 
 class AnalysisState(TypedDict, total=False):
     contract_id: str
     contract_chunks: list[dict[str, Any]]
-    gold_labels: dict[str, str]  # H01..H17 -> ENTAILED/CONTRADICTED/NOT_MENTIONED
+    gold_labels: dict[str, str]
     hypotheses_queue: list[str]
     current_hid: str | None
     draft: dict[str, Any] | None
-    validator_verdict: dict[str, Any] | None
-    retry_count: int
     prior_decisions: list[dict[str, Any]]
     runtrace: Runtrace
 
@@ -49,50 +42,33 @@ def _node_orchestrator(state: AnalysisState) -> AnalysisState:
     state["current_hid"] = queue[0]
     state["hypotheses_queue"] = queue[1:]
     state["draft"] = None
-    state["validator_verdict"] = None
-    state["retry_count"] = 0
     return state
 
 
 def _node_analyzer(state: AnalysisState) -> AnalysisState:
     hid = state["current_hid"]
-    feedback = None
-    if state.get("validator_verdict") and not state["validator_verdict"].get("pass"):
-        feedback = state["validator_verdict"].get("feedback", "")
     state["draft"] = analyze_hypothesis(
         contract_id=state["contract_id"],
         contract_chunks=state["contract_chunks"],
         hid=hid,
         prior_decisions=state.get("prior_decisions", []),
-        validator_feedback=feedback,
     )
     return state
-
-
-def _node_validator(state: AnalysisState) -> AnalysisState:
-    hid = state["current_hid"]
-    state["validator_verdict"] = validate_draft(
-        contract_id=state["contract_id"], hid=hid, draft=state["draft"]
-    )
-    return state
-
-
-def _route_after_validator(state: AnalysisState) -> str:
-    verdict = state.get("validator_verdict") or {}
-    if not verdict.get("pass") and state.get("retry_count", 0) < VALIDATOR_MAX_RETRIES:
-        state["retry_count"] = state.get("retry_count", 0) + 1
-        return "analyzer"
-    return "commit"
 
 
 def _node_commit(state: AnalysisState) -> AnalysisState:
     hid = state["current_hid"]
     draft = state["draft"] or {}
-    verdict = state.get("validator_verdict") or {}
+
+    # Pure-code post-check (no LLM call) — feeds the runtrace's
+    # validations[] / quote_integrity_pass fields. Never loops back.
+    verdict = validate_draft(
+        contract_id=state["contract_id"], hid=hid, draft=draft
+    )
     expected = verdict.get("playbook_expected") or {}
 
-    # Force risk to match the deterministic playbook (per spec: playbook is
-    # *applied* — the agent's risk fields are guidance, the playbook is truth)
+    # Playbook is truth — override the LLM's risk fields with the
+    # deterministic mapping.
     risk = {
         "severity": expected.get("severity") or draft.get("risk", {}).get("severity", "LOW"),
         "recommended_action": expected.get("recommended_action")
@@ -106,24 +82,22 @@ def _node_commit(state: AnalysisState) -> AnalysisState:
     if label not in ("ENTAILED", "CONTRADICTED", "NOT_MENTIONED"):
         label = "NOT_MENTIONED"
 
-    supporting = []
-    for ev in (draft.get("evidence") or {}).get("supporting") or []:
-        supporting.append(
-            {
-                "chunk_id": ev.get("chunk_id", "chunk_0"),
-                "quote": ev.get("quote", "")[:1000],
-                "relevance_score": float(ev.get("relevance_score", 0.8)),
-            }
-        )
-    counter = []
-    for ev in (draft.get("evidence") or {}).get("counter") or []:
-        counter.append(
-            {
-                "chunk_id": ev.get("chunk_id", "chunk_0"),
-                "quote": ev.get("quote", "")[:1000],
-                "relevance_score": float(ev.get("relevance_score", 0.5)),
-            }
-        )
+    supporting = [
+        {
+            "chunk_id": ev.get("chunk_id", "chunk_0"),
+            "quote": ev.get("quote", "")[:1000],
+            "relevance_score": float(ev.get("relevance_score", 0.8)),
+        }
+        for ev in (draft.get("evidence") or {}).get("supporting") or []
+    ]
+    counter = [
+        {
+            "chunk_id": ev.get("chunk_id", "chunk_0"),
+            "quote": ev.get("quote", "")[:1000],
+            "relevance_score": float(ev.get("relevance_score", 0.5)),
+        }
+        for ev in (draft.get("evidence") or {}).get("counter") or []
+    ]
 
     justification = draft.get("justification") or {}
     decision = {
@@ -153,13 +127,13 @@ def _node_commit(state: AnalysisState) -> AnalysisState:
             "producer": {"component": "analyzer_agent"},
             "started_at": step_now,
             "ended_at": step_now,
-            "inputs": {"hypothesis_id": hid, "retry_count": state.get("retry_count", 0)},
+            "inputs": {"hypothesis_id": hid},
             "outputs": {"label": label, "confidence": decision["confidence"]},
         },
         {
             "step_id": f"{hid}-2",
-            "step_type": "validator_feedback",
-            "producer": {"component": "validator_agent"},
+            "step_type": "consistency_check",
+            "producer": {"component": "validator"},
             "started_at": step_now,
             "ended_at": step_now,
             "inputs": {"draft_label": label},
@@ -186,7 +160,7 @@ def _node_commit(state: AnalysisState) -> AnalysisState:
             "dataset_hypothesis_key": HID_TO_NDA[hid],
             "hypothesis_text": hypothesis_text(hid),
             "gold_label": gold,
-            "latency_ms": 0.0,  # filled by run_eval if needed
+            "latency_ms": 0.0,
             "retrieval": {
                 "mode": rt.retriever_mode,
                 "query": hypothesis_text(hid),
@@ -194,7 +168,7 @@ def _node_commit(state: AnalysisState) -> AnalysisState:
             },
             "compliant_evidence_required": evidence_required,
             "quote_integrity_pass": qi_pass,
-            "retry_count": state.get("retry_count", 0),
+            "retry_count": 0,
             "steps": steps,
             "decision": decision,
             "validations": verdict.get("validations", []),
@@ -215,7 +189,6 @@ def build_analysis_graph():
     g = StateGraph(AnalysisState)
     g.add_node("orchestrator", _node_orchestrator)
     g.add_node("analyzer", _node_analyzer)
-    g.add_node("validator", _node_validator)
     g.add_node("commit", _node_commit)
 
     g.set_entry_point("orchestrator")
@@ -224,12 +197,7 @@ def build_analysis_graph():
         _route_after_orchestrator,
         {"analyzer": "analyzer", END: END},
     )
-    g.add_edge("analyzer", "validator")
-    g.add_conditional_edges(
-        "validator",
-        _route_after_validator,
-        {"analyzer": "analyzer", "commit": "commit"},
-    )
+    g.add_edge("analyzer", "commit")
     g.add_edge("commit", "orchestrator")
     return g.compile()
 
@@ -239,7 +207,6 @@ def run_hypothesis_analysis(
     gold_labels: dict[str, str],
     retriever_mode: str,
 ) -> Runtrace:
-    """High-level entry: returns a populated Runtrace."""
     register_contract(contract)
     rt = Runtrace(
         mode="hypothesis_analysis",

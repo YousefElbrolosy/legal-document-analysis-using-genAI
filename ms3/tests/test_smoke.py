@@ -29,6 +29,10 @@ def _stub_heavy_deps():
         m = types.ModuleType("openai")
         m.OpenAI = lambda *a, **k: None
         sys.modules["openai"] = m
+    if "ollama" not in sys.modules:
+        m = types.ModuleType("ollama")
+        m.Client = lambda *a, **k: None
+        sys.modules["ollama"] = m
     if "langgraph" not in sys.modules:
         sys.modules["langgraph"] = types.ModuleType("langgraph")
     if "langgraph.graph" not in sys.modules:

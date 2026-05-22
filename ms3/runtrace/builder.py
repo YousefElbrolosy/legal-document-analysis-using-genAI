@@ -186,7 +186,7 @@ class Runtrace:
                     "temperature": TEMPERATURE,
                     "top_p": TOP_P,
                     "max_seq_length": MAX_TOKENS,
-                    "provider": "openrouter",
+                    "provider": "ollama_cloud",
                 },
             },
             "retrieval_strategy": {

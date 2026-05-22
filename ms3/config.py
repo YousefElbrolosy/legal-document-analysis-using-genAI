@@ -29,7 +29,10 @@ RUNS_DIR = MS3_ROOT / "runs"
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-MODEL = os.environ.get("MS3_MODEL", "qwen/qwen-2.5-72b-instruct")
+# Ollama Cloud — currently the active provider for chat() in models/llm.py.
+OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "https://ollama.com")
+MODEL = os.environ.get("MS3_MODEL", "gemma4:31b-cloud")
 TEMPERATURE = float(os.environ.get("MS3_TEMPERATURE", "0.1"))
 TOP_P = float(os.environ.get("MS3_TOP_P", "0.9"))
 MAX_TOKENS = int(os.environ.get("MS3_MAX_TOKENS", "1024"))
