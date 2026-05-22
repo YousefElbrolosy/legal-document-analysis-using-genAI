@@ -1,20 +1,16 @@
 """LLM client(s) for the MS3 multi-agent system.
 
-Two providers are wired up:
+Four providers are wired up, selected by `MS3_PROVIDER`:
 
-  * `get_client()`        — OpenRouter / OpenAI-compatible client. Preserved
-                            for fallback / future swap, but NOT currently
-                            used by `chat()`.
-  * `get_ollama_client()` — Ollama Cloud client (the official `ollama`
-                            Python SDK pointed at https://ollama.com with a
-                            Bearer token). This is what `chat()` uses today.
+  * `openai`     — OpenAI (api.openai.com). Default.
+  * `nvidia`     — NVIDIA Build / NIM (OpenAI-compatible, free tier).
+  * `openrouter` — OpenRouter (OpenAI-compatible).
+  * `ollama`     — Ollama Cloud (uses the official `ollama` Python SDK).
 
-Ollama's OpenAI-compat semantics differ in two ways that the rest of the
-codebase has to handle:
-  - `response.message.tool_calls[i].function.arguments` is already a Python
-    dict (no `json.loads` step needed).
-  - Tool result messages are `{"role": "tool", "name": ..., "content": ...}`
-    — no `tool_call_id` field. (See `ms3/agents/base.py`.)
+`chat()` returns an object that exposes `.content` (str) and `.tool_calls`
+(list | None). The shape of each tool_call differs slightly between the
+OpenAI SDK and the Ollama SDK; `ms3/agents/base.py` handles both via
+`ms3.config.PROVIDER`.
 """
 from __future__ import annotations
 
@@ -22,24 +18,46 @@ from functools import lru_cache
 from typing import Any
 
 from openai import OpenAI
-from ollama import Client as OllamaClient
 
 from ms3.config import (
     MAX_TOKENS,
     MODEL,
+    NVIDIA_API_KEY,
+    NVIDIA_BASE_URL,
     OLLAMA_API_KEY,
     OLLAMA_HOST,
+    OPENAI_API_KEY,
+    OPENAI_BASE_URL,
     OPENROUTER_API_KEY,
     OPENROUTER_BASE_URL,
+    PROVIDER,
     TEMPERATURE,
     TOP_P,
 )
 
 
 @lru_cache(maxsize=1)
-def get_client() -> OpenAI:
-    """OpenRouter / OpenAI-compatible client. Kept for fallback — chat()
-    does not use this today."""
+def get_openai_client() -> OpenAI:
+    if not OPENAI_API_KEY:
+        raise RuntimeError(
+            "OPENAI_API_KEY is not set. Add it to ms3/.env "
+            "(see ms3/.env.example)."
+        )
+    return OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+
+
+@lru_cache(maxsize=1)
+def get_nvidia_client() -> OpenAI:
+    if not NVIDIA_API_KEY:
+        raise RuntimeError(
+            "NVIDIA_API_KEY is not set. Copy ms3/.env.example to ms3/.env "
+            "and fill in your key from https://build.nvidia.com."
+        )
+    return OpenAI(api_key=NVIDIA_API_KEY, base_url=NVIDIA_BASE_URL)
+
+
+@lru_cache(maxsize=1)
+def get_openrouter_client() -> OpenAI:
     if not OPENROUTER_API_KEY:
         raise RuntimeError(
             "OPENROUTER_API_KEY is not set. Copy ms3/.env.example to ms3/.env "
@@ -56,8 +74,11 @@ def get_client() -> OpenAI:
 
 
 @lru_cache(maxsize=1)
-def get_ollama_client() -> OllamaClient:
-    """Ollama Cloud client, authenticated with a Bearer token from .env."""
+def get_ollama_client():
+    # Lazy import — only required when MS3_PROVIDER=ollama, so users on
+    # OpenAI / NVIDIA / OpenRouter don't need the `ollama` package installed.
+    from ollama import Client as OllamaClient
+
     if not OLLAMA_API_KEY:
         raise RuntimeError(
             "OLLAMA_API_KEY is not set. Add it to ms3/.env "
@@ -69,25 +90,41 @@ def get_ollama_client() -> OllamaClient:
     )
 
 
-def chat(
+def _chat_openai(
+    client: OpenAI,
     messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]] | None = None,
-    *,
-    temperature: float | None = None,
-    max_tokens: int | None = None,
-    response_format: dict[str, Any] | None = None,
+    tools: list[dict[str, Any]] | None,
+    temperature: float,
+    max_tokens: int,
+    response_format: dict[str, Any] | None,
 ) -> Any:
-    """Single non-streaming chat call against Ollama Cloud.
-
-    Returns the response's `.message` object, which exposes:
-      - `.content`   (str)
-      - `.tool_calls` (list | None) — each item has `.function.name` and
-        `.function.arguments` (already a dict).
-    """
-    options: dict[str, Any] = {
-        "temperature": TEMPERATURE if temperature is None else temperature,
+    kwargs: dict[str, Any] = {
+        "model": MODEL,
+        "messages": messages,
+        "temperature": temperature,
         "top_p": TOP_P,
-        "num_predict": MAX_TOKENS if max_tokens is None else max_tokens,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    if tools:
+        kwargs["tools"] = tools
+    if response_format is not None:
+        kwargs["response_format"] = response_format
+    completion = client.chat.completions.create(**kwargs)
+    return completion.choices[0].message
+
+
+def _chat_ollama(
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None,
+    temperature: float,
+    max_tokens: int,
+    response_format: dict[str, Any] | None,
+) -> Any:
+    options: dict[str, Any] = {
+        "temperature": temperature,
+        "top_p": TOP_P,
+        "num_predict": max_tokens,
     }
     kwargs: dict[str, Any] = {
         "model": MODEL,
@@ -97,9 +134,32 @@ def chat(
     }
     if tools:
         kwargs["tools"] = tools
-    # Ollama's analogue of OpenAI's response_format={"type":"json_object"}.
     if response_format is not None and response_format.get("type") == "json_object":
         kwargs["format"] = "json"
-
     response = get_ollama_client().chat(**kwargs)
     return response.message
+
+
+def chat(
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None = None,
+    *,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    response_format: dict[str, Any] | None = None,
+) -> Any:
+    """Single non-streaming chat call against the configured provider."""
+    temp = TEMPERATURE if temperature is None else temperature
+    tokens = MAX_TOKENS if max_tokens is None else max_tokens
+
+    if PROVIDER == "openai":
+        return _chat_openai(get_openai_client(), messages, tools, temp, tokens, response_format)
+    if PROVIDER == "nvidia":
+        return _chat_openai(get_nvidia_client(), messages, tools, temp, tokens, response_format)
+    if PROVIDER == "openrouter":
+        return _chat_openai(get_openrouter_client(), messages, tools, temp, tokens, response_format)
+    if PROVIDER == "ollama":
+        return _chat_ollama(messages, tools, temp, tokens, response_format)
+    raise RuntimeError(
+        f"Unknown MS3_PROVIDER={PROVIDER!r}. Expected one of: openai, nvidia, openrouter, ollama."
+    )

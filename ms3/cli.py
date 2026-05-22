@@ -89,7 +89,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
 
     csv_path, zip_path = run_eval(
         split=args.split, limit=args.limit, out_dir=Path(args.out_dir) if args.out_dir else RUNS_DIR,
-        retriever=args.retriever,
+        retriever=args.retriever, workers=args.workers,
     )
     print(f"[ms3] eval csv -> {csv_path}")
     print(f"[ms3] runtraces zip -> {zip_path}")
@@ -105,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--split", choices=["test", "dev"], default="test")
     p.add_argument("--limit", type=int, default=None, help="eval: max #contracts")
     p.add_argument("--out-dir", help="eval: directory for per-contract runtraces")
+    p.add_argument("--workers", type=int, default=8, help="eval: parallel worker threads (default 8; use 1 for sequential)")
     args = p.parse_args(argv)
 
     if args.mode in ("hypothesis", "chat") and not args.contract:
