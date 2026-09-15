@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guc-csen1144.example/schemas/runtrace_ms3.schema.json",
+  "title": "ContractNLI MS3 RunTrace",
+  "description": "Milestone 3 RunTrace for one ContractNLI contract OR one conversation session",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run",
+    "retrieval_strategy",
+    "conversation_history",
+    "contract",
+    "playbook",
+    "hypothesis_traces",
+    "tool_calls",
+    "tool_call_summary",
+    "tool_call_summary_by_agent",
+    "metrics",
+    "run_validations"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["3.0-ms3"] },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "started_at", "ended_at", "framework", "mode", "parameters"],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 8 },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" },
+        "framework": { "type": "string", "enum": ["multi_agent_system"] },
+        "mode": { "type": "string", "enum": ["hypothesis_analysis", "conversation"] },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_model", "adapter_method", "quantization"],
+          "properties": {
+            "base_model": { "type": "string" },
+            "adapter_method": { "type": "string", "enum": ["lora", "qlora", "none"] },
+            "adapter_source": { "type": "string" },
+            "quantization": { "type": "string", "enum": ["4bit", "none"] },
+            "embedding_model": { "type": "string" },
+            "seed": { "type": "integer", "minimum": 0 },
+            "max_seq_length": { "type": "integer", "minimum": 1 },
+            "temperature": { "type": "number", "minimum": 0 },
+            "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
+            "provider": { "type": "string" }
+          }
+        }
+      }
+    },
+    "retrieval_strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "knowledge_base_source", "selector", "exactly_one_branch_per_run", "external_context_role"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["vector", "graph"] },
+        "knowledge_base_source": { "type": "string", "enum": ["ContractNLI-train", "ContractNLI training split"] },
+        "selector": { "type": "string", "minLength": 1 },
+        "exactly_one_branch_per_run": { "const": true },
+        "external_context_role": { "const": "historical_precedent_only" },
+        "index_reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["index_type"],
+          "properties": {
+            "index_type": { "type": "string", "enum": ["chroma_vector_db", "networkx_graph"] },
+            "path": { "type": "string" }
+          }
+        },
+        "top_k": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "conversation_history": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ConversationTurn" }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_id", "source_type", "hash_sha256", "chunks"],
+      "properties": {
+        "contract_id": { "type": "string" },
+        "source_type": { "type": "string", "enum": ["txt", "pdf", "docx", "unknown"] },
+        "source_name": { "type": "string" },
+        "split": { "type": "string", "enum": ["ContractNLI evaluation split", "test", "dev", "ad-hoc"] },
+        "language": { "type": "string", "default": "en" },
+        "hash_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "chunks": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ContractChunk" } }
+      }
+    },
+    "playbook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["playbook_id", "schema_version", "schema_file", "version", "ruleset_hash"],
+      "properties": {
+        "playbook_id": { "type": "string" },
+        "schema_version": { "type": "string", "enum": ["2.0-ms2", "3.0-ms3"] },
+        "schema_file": { "type": "string" },
+        "version": { "type": "string" },
+        "ruleset_hash": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" }
+      }
+    },
+    "hypothesis_traces": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 17,
+      "items": { "$ref": "#/$defs/HypothesisTrace" }
+    },
+    "tool_calls": {
+      "type": "array",
+      "description": "Every tool invocation (with name, args, output, latency, agent) made during this run.",
+      "items": { "$ref": "#/$defs/ToolCall" }
+    },
+    "tool_call_summary": {
+      "type": "object",
+      "description": "Total count per tool_name across all agents.",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "tool_call_summary_by_agent": {
+      "type": "object",
+      "description": "Per-agent count per tool_name (satisfies spec §2h: tool calls per agent).",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "metrics": { "$ref": "#/$defs/Metrics" },
+    "run_validations": { "type": "array", "items": { "$ref": "#/$defs/ValidationResult" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "run": { "properties": { "mode": { "const": "hypothesis_analysis" } } } } },
+      "then": { "properties": { "hypothesis_traces": { "minItems": 17, "maxItems": 17 } } }
+    }
+  ],
+  "$defs": {
+    "ConversationTurn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["turn_id", "role", "content"],
+      "properties": {
+        "turn_id": { "type": "integer", "minimum": 1 },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "retrieval_mode": { "type": "string", "enum": ["vector", "graph"] },
+        "retrieved_context": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "ContractChunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunk_id", "text", "span"],
+      "properties": {
+        "chunk_id": { "type": "string" },
+        "text": { "type": "string" },
+        "span": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["char_start", "char_end"],
+          "properties": {
+            "char_start": { "type": "integer", "minimum": 0 },
+            "char_end": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "ToolCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool_name", "agent", "args", "started_at", "ended_at"],
+      "properties": {
+        "tool_name": { "type": "string" },
+        "agent": {
+          "type": "string",
+          "enum": ["orchestrator", "analyzer_agent", "validator_agent", "conversation_agent"]
+        },
+        "args": { "type": "object", "additionalProperties": true },
+        "output": {},
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" },
+        "latency_ms": { "type": "number", "minimum": 0 },
+        "error": { "type": "string" },
+        "related_hypothesis_id": { "type": "string" }
+      }
+    },
+    "HypothesisTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hypothesis_id",
+        "hypothesis_text",
+        "gold_label",
+        "latency_ms",
+        "retrieval",
+        "compliant_evidence_required",
+        "quote_integrity_pass",
+        "steps",
+        "decision",
+        "validations"
+      ],
+      "properties": {
+        "hypothesis_id": { "type": "string", "pattern": "^H(0[1-9]|1[0-7])$" },
+        "dataset_hypothesis_key": { "type": "string" },
+        "hypothesis_text": { "type": "string" },
+        "gold_label": { "type": "string", "enum": ["ENTAILED", "CONTRADICTED", "NOT_MENTIONED"] },
+        "latency_ms": { "type": "number", "minimum": 0 },
+        "retrieval": { "$ref": "#/$defs/HypothesisRetrieval" },
+        "compliant_evidence_required": { "type": "boolean" },
+        "quote_integrity_pass": { "type": "boolean" },
+        "retry_count": { "type": "integer", "minimum": 0 },
+        "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/TraceStep" } },
+        "decision": { "$ref": "#/$defs/Decision" },
+        "validations": { "type": "array", "items": { "$ref": "#/$defs/ValidationResult" } }
+      }
+    },
+    "HypothesisRetrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "query", "context"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["vector", "graph"] },
+        "query": { "type": "string" },
+        "context": { "type": "array", "items": { "$ref": "#/$defs/RetrievalContextItem" } }
+      }
+    },
+    "RetrievalContextItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "text"],
+      "properties": {
+        "source": { "type": "string", "enum": ["vector_db", "graph_db"] },
+        "rank": { "type": "integer", "minimum": 1 },
+        "score": { "type": ["number", "null"] },
+        "text": { "type": "string" },
+        "metadata": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "TraceStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id", "step_type", "producer", "started_at", "ended_at", "inputs", "outputs"],
+      "properties": {
+        "step_id": { "type": "string" },
+        "step_type": {
+          "type": "string",
+          "enum": [
+            "load_inputs",
+            "route_retriever",
+            "retrieve_context",
+            "format_context",
+            "nli_infer",
+            "evidence_map",
+            "playbook_map",
+            "consistency_check",
+            "format_response",
+            "tool_invoke",
+            "validator_feedback",
+            "agent_message"
+          ]
+        },
+        "producer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["component"],
+          "properties": {
+            "component": {
+              "type": "string",
+              "enum": [
+                "pipeline",
+                "query_router",
+                "vector_retriever",
+                "graph_retriever",
+                "context_formatter",
+                "conversational_agent",
+                "model",
+                "playbook",
+                "validator",
+                "orchestrator",
+                "analyzer_agent",
+                "validator_agent",
+                "conversation_agent"
+              ]
+            },
+            "component_id": { "type": "string" }
+          }
+        },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" },
+        "inputs": { "type": "object", "additionalProperties": true },
+        "outputs": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "confidence", "evidence", "justification", "risk"],
+      "properties": {
+        "label": { "type": "string", "enum": ["ENTAILED", "CONTRADICTED", "NOT_MENTIONED"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["supporting", "counter"],
+          "properties": {
+            "supporting": { "type": "array", "items": { "$ref": "#/$defs/EvidenceItem" } },
+            "counter": { "type": "array", "items": { "$ref": "#/$defs/EvidenceItem" } }
+          }
+        },
+        "justification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["claim", "inference", "limitations"],
+          "properties": {
+            "claim": { "type": "string" },
+            "inference": { "type": "string" },
+            "limitations": { "type": "string" }
+          }
+        },
+        "risk": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["severity", "playbook_rule_ids", "recommended_action"],
+          "properties": {
+            "severity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+            "criticality": { "type": "string", "enum": ["P0", "P1", "P2"] },
+            "playbook_rule_ids": { "type": "array", "items": { "type": "string" } },
+            "recommended_action": { "type": "string", "enum": ["ACCEPT", "CLARIFY", "NEGOTIATE", "ESCALATE"] }
+          }
+        }
+      }
+    },
+    "EvidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunk_id", "quote", "relevance_score"],
+      "properties": {
+        "chunk_id": { "type": "string" },
+        "quote": { "type": "string" },
+        "relevance_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "span": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "char_start": { "type": "integer", "minimum": 0 },
+            "char_end": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "ValidationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validator_id", "status", "message"],
+      "properties": {
+        "validator_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["PASS", "FAIL", "WARN"] },
+        "message": { "type": "string" },
+        "related_hypothesis_id": { "type": "string" },
+        "related_chunk_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hypothesis_count", "label_counts"],
+      "properties": {
+        "hypothesis_count": { "type": "integer", "minimum": 0, "maximum": 17 },
+        "correct_count": { "type": "integer", "minimum": 0, "maximum": 17 },
+        "compliant_count": { "type": "integer", "minimum": 0, "maximum": 17 },
+        "quote_integrity_count": { "type": "integer", "minimum": 0, "maximum": 17 },
+        "contract_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "groundedness_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "quote_integrity_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "contract_latency_ms": { "type": "number", "minimum": 0 },
+        "retrieval_latency_ms": { "type": "number", "minimum": 0 },
+        "label_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ENTAILED", "CONTRADICTED", "NOT_MENTIONED"],
+          "properties": {
+            "ENTAILED": { "type": "integer", "minimum": 0, "maximum": 17 },
+            "CONTRADICTED": { "type": "integer", "minimum": 0, "maximum": 17 },
+            "NOT_MENTIONED": { "type": "integer", "minimum": 0, "maximum": 17 }
+          }
+        }
+      }
+    }
+  }
+}

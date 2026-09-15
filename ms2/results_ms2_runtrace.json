@@ -1,0 +1,36 @@
+{
+  "schema_version": "2.0-ms2",
+  "run": {
+    "run_id": "demo-run-001",
+    "started_at": "2026-04-28T00:00:00Z",
+    "framework": "multi_agent_system"
+  },
+  "retrieval_strategy": {
+    "mode": "vector",
+    "knowledge_base_source": "ContractNLI-train"
+  },
+  "conversation_history": [
+    {
+      "turn_id": 1,
+      "role": "user",
+      "content": "What does this contract say about non-disclosure?",
+      "retrieved_context": [
+        "Sample historical outcome..."
+      ]
+    },
+    {
+      "turn_id": 2,
+      "role": "assistant",
+      "content": "Here is an analysis based on the extracted precedents..."
+    }
+  ],
+  "contract": {
+    "contract_id": "test_id",
+    "text": "NON-DISCLOSURE AND CONFIDENTIALITY AGREEMENT\nThis NON-DISCLOSURE AND CONFIDENTIALITY AGREEMENT (\u201cAgr",
+    "hash_sha256": "fakehash"
+  },
+  "playbook": {},
+  "hypothesis_traces": [],
+  "metrics": {},
+  "run_validations": []
+}

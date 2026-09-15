@@ -1,2 +1,3 @@
-label_accuracy,groundedness,quote_integrity_pass_rate,avg_latency_ms,evaluation_timestamp
-0.607843,0.981349,1.000000,117405.22,2026-04-10T13:51:08.470620+00:00
+system,label_accuracy,groundedness,quote_integrity_pass_rate,avg_latency_ms,evaluation_timestamp
+fine_tuned_ms1,0.607843,0.981349,1.000000,117405.22,2026-04-10T13:51:08.470620+00:00
+multi_agent_ms3,0.798661,0.893831,0.898613,78035.87,2026-05-22T19:51:13.695573+00:00

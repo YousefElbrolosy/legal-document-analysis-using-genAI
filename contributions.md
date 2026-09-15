@@ -1,6 +1,6 @@
-# Milestone 1 — Team Contributions
+# Team Contributions
 
-## Team Members
+## Milestone 1
 
 | Name | ID | Contribution |
 |---|---|---|
@@ -9,3 +9,13 @@
 | Mahmoud Dahroug | 55-1311 | QLoRA fine-tuning pipeline and Output Validation  |
 | Yousef Elbrolosy | 55-2615 | Output Validation, Initial Planning and Testing |
 | Youssef Adel | 55-2491 | QLoRA fine-tuning pipeline and Initial Planning |
+
+## Milestone 3
+
+| Name | ID | Contribution |
+|---|---|---|
+| Seif Diaa | 55-8584 | Auditability |
+| Ziad Abdelrahman | 55-1371 | Tool calls |
+| Mahmoud Dahroug | 55-1311 | Mahmoud Dahroug |
+| Yousef Elbrolosy | 55-2615 | Conversation mode |
+| Youssef Adel | 55-2491 | 17 hypothesis analysis mode |

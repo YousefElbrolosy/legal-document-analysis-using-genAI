@@ -1,0 +1,84 @@
+name: Multi-Agent Legal Document Analysis
+version: '2.0'
+dataset:
+  name: ContractNLI
+  retrieval_corpus: training split
+  analyzed_contracts: evaluation split
+implemented_ms2:
+  - vector_rag
+  - graph_rag
+  - conversation_agent
+  - conversation_history
+  - runtrace_logging_scaffold
+planned_architecture:
+  - 17_hypothesis_review_outputs
+  - playbook_governed_specialist_agents
+  - optional_runtrace_validation
+  - f1_and_strict_classification_metrics
+architecture:
+  - type: LLM
+    name: Qwen2.5-3B-Instruct
+    provider: HuggingFace
+    quantization: 4-bit (BitsAndBytes)
+    role: Core Reasoning Engine & Conversational Agent
+
+  - type: Vector Database
+    name: ChromaDB
+    indexer: sentence-transformers/all-MiniLM-L6-v2 (CPU execution)
+    role: Semantic Search for Historical Precedent
+    components:
+      - Clause and Hypothesis Embedded Chunks
+      - Scaled Batching Mechanism (N < 5000)
+
+  - type: Graph Database
+    name: NetworkX
+    storage: Pickled Graph
+    role: Explicit Relational Traversal
+    components:
+      - Clause Nodes
+      - Hypothesis Nodes
+      - Relation Edges
+
+  - type: State Manager
+    name: Conversational Agent History
+    role: Contextual Memory & Prompt Grounding
+    memory_structure:
+      - history: list[dict]
+      - system_prompt: "You are an expert legal aide reviewing NDAs..."
+      - grounding_constraint: "Use the provided External Context ONLY to understand how similar clauses were interpreted... Always ground your final decision strictly on the provided Target Contract Text."
+
+  - type: Orchestrator
+    name: Milestone2.ipynb orchestration cells
+    role: Single-Branch Retrieval Strategy Selection & Prompt Hydration
+    features:
+      - retrieval_mode: [vector, graph]
+      - exactly_one_retrieval_branch_per_run: true
+      - test_contract_loader: test.json
+      - runtrace_logger: results_ms2_runtrace.json
+
+  - type: Context Formatter
+    name: Single-Branch Context Formatter
+    role: Normalizes retrieved context from the selected retriever only
+    constraints:
+      - does_not_merge_vector_and_graph_outputs_in_one_run
+      - preserves_external_retrieval_context_as_historical_precedent
+
+  - type: Playbook Schema
+    name: assets/playbook_ms2.schema.json
+    role: Defines 17 hypothesis outputs, agent ownership, retrieval policy, grounding policy, and conversation policy
+    status: schema_defined_ms2
+
+  - type: Runtrace Schema
+    name: assets/runtrace_ms2.schema.json
+    role: Defines run metadata, selected retrieval mode, conversation history, contract identity, hypothesis traces, metrics, and validations
+    status: schema_defined_ms2
+
+outputs:
+  conversational_response: implemented
+  preserved_conversation_history: implemented
+  hypothesis_level_outputs:
+    count: 17
+    status: architectural_placeholder_for_ms3
+  runtrace:
+    path: results_ms2_runtrace.json
+    schema: assets/runtrace_ms2.schema.json
